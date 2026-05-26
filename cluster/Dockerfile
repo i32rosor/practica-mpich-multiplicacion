@@ -15,6 +15,13 @@ COPY project/ .
 
 # Normal build command
 RUN mpicc -o mpi_hello_world mpi_hello_world.c
+RUN mpicc -o send_recv send_recv.c
+RUN mpicc -o ping_pong ping_pong.c
+RUN mpicc -o ring ring.c
+RUN mpicc -o broadcast broadcast.c
+RUN mpicc -o scatter scatter.c
+RUN mpicc -o multiplicacion multiplicacion.c
+
 
 # ####################
 # For Docker beginner:

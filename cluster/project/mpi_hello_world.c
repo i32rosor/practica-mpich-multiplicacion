@@ -30,8 +30,16 @@ int main(int argc, char** argv) {
   MPI_Get_processor_name(processor_name, &name_len);
 
   // Print off a hello world message
-  printf("Hello world from processor %s, rank %d out of %d processors\n",
+  if(world_rank == 1)
+  {
+    printf("Hola mundo, estoy en %s, soy el proceso %d de %d procesos\n",
          processor_name, world_rank, world_size);
+  }
+  else
+  {
+    printf("Hello world from processor %s, rank %d out of %d processors\n",
+         processor_name, world_rank, world_size);
+  }
 
   // Finalize the MPI environment. No more MPI calls can be made after this
   MPI_Finalize();
