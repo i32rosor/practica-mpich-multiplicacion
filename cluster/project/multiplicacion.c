@@ -3,92 +3,81 @@
 #include <stdlib.h>
 #include <time.h>
 
-int* allocate_matrix(int rows, int cols) {
-    return (int*)malloc(rows * cols * sizeof(int));
-}
+// Definimos el tamaño de la matriz. ¡Recuerda que debe ser múltiplo de 8!
+#define N 1024 
 
-void init_matrix_random(int* matrix, int rows, int cols) {
-    for (int i = 0; i < rows * cols; i++) {
-        matrix[i] = (rand() % 10) + 1;
-    }
-}
+// --- Declaración de funciones (separando la lógica) ---
 
-void multiply_matrices(int* local_A, int* B, int* local_C, int local_rows, int N) {
-    for (int i = 0; i < local_rows; i++) {
-        for (int j = 0; j < N; j++) {
-            local_C[i * N + j] = 0;
-            for (int k = 0; k < N; k++) {
-                local_C[i * N + j] += local_A[i * N + k] * B[k * N + j];
-            }
-        }
-    }
-}
+// Función para inicializar una matriz con valores aleatorios (1 al 10)
+void inicializar_matriz(int matriz[N][N]);
 
+// Función para imprimir una matriz (útil para depurar con N pequeños)
+void imprimir_matriz(int matriz[N][N], const char* nombre);
+
+// Función principal donde ocurre la magia de MPI
 int main(int argc, char** argv) {
+    int size, rank;
+    double start_time, end_time;
+
+    // 1. Inicializamos el entorno MPI
     MPI_Init(&argc, &argv);
-
-    int rank, size;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-    if (argc != 2) {
+    // Verificamos que N sea múltiplo de 8 (Norma de la práctica)
+    if (N % 8 != 0) {
         if (rank == 0) {
-            printf("Uso: mpirun -np <procesos> ./multiplicacion <Tamanio_Matriz_N>\n");
+            printf("Error: El tamaño de la matriz (N=%d) debe ser múltiplo de 8.\n", N);
         }
         MPI_Finalize();
         return 1;
     }
 
-    int N = atoi(argv[1]);
-
-    if (N % 8 != 0 || N % size != 0) {
-        if (rank == 0) {
-            printf("Error: N debe ser multiplo de 8 y divisible por el numero de procesos.\n");
-        }
-        MPI_Finalize();
-        return 1;
-    }
-
-    int local_rows = N / size;
-
-    int *A = NULL;
-    int *B = allocate_matrix(N, N);
-    int *C = NULL;
+    // Punteros para las matrices. Solo el maestro necesita las matrices completas (A, B, C).
+    // Usamos punteros y asignación dinámica para evitar desbordar la pila (Stack Overflow) con matrices grandes.
+    int (*A)[N] = NULL;
+    int (*B)[N] = NULL;
+    int (*C)[N] = NULL;
     
-    int *local_A = allocate_matrix(local_rows, N);
-    int *local_C = allocate_matrix(local_rows, N);
+    // Todos los procesos necesitan conocer la matriz B completa y una porción de A y C.
+    // Asignaremos memoria para B en todos los procesos más adelante.
 
     if (rank == 0) {
-        A = allocate_matrix(N, N);
-        C = allocate_matrix(N, N);
+        // --- NODO MAESTRO ---
+        // Asignamos memoria para las matrices completas
+        A = malloc(sizeof(int[N][N]));
+        B = malloc(sizeof(int[N][N]));
+        C = malloc(sizeof(int[N][N]));
+
+        // Inicializamos las matrices
+        // Recuerda: el cálculo de las matrices iniciales NO se temporiza
         srand(time(NULL));
-        init_matrix_random(A, N, N);
-        init_matrix_random(B, N, N);
+        inicializar_matriz(A);
+        inicializar_matriz(B);
+        
+        // imprimir_matriz(A, "A"); // Descomentar solo para N pequeño
+    } else {
+        // --- NODOS TRABAJADORES ---
+        // Los trabajadores también necesitan memoria para la matriz B (que recibirán completa)
+        B = malloc(sizeof(int[N][N]));
     }
 
-    double start_time = 0.0;
+    // --- REPARTO DE DATOS (AQUÍ EMPIEZA LA COMUNICACIÓN) ---
+    // 1. Enviar la matriz B completa a TODOS los procesos usando MPI_Bcast
+    // ... (Lo implementaremos en el siguiente paso)
+
+    // 2. Repartir las filas de la matriz A usando MPI_Scatter
+    // ... (Lo implementaremos en el siguiente paso)
+
+    // --- INICIO DE TEMPORIZACIÓN ---
+    // El maestro empieza a contar el tiempo justo antes de que empiece el cálculo distribuido
     if (rank == 0) {
         start_time = MPI_Wtime();
     }
 
-    MPI_Bcast(B, N * N, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Scatter(A, local_rows * N, MPI_INT, local_A, local_rows * N, MPI_INT, 0, MPI_COMM_WORLD);
+    // --- CÓMPUTO DISTRIBUIDO ---
+    // Cada proceso multiplica su porción de filas de A por la matriz B completa.
+    // ... (Lo implementaremos en el siguiente paso)
 
-    multiply_matrices(local_A, B, local_C, local_rows, N);
-
-    MPI_Gather(local_C, local_rows * N, MPI_INT, C, local_rows * N, MPI_INT, 0, MPI_COMM_WORLD);
-
-    if (rank == 0) {
-        double end_time = MPI_Wtime();
-        printf("%d,%d,%f\n", N, size, end_time - start_time);
-        free(A);
-        free(C);
-    }
-
-    free(B);
-    free(local_A);
-    free(local_C);
-
-    MPI_Finalize();
-    return 0;
-}
+    // --- FIN DE TEMPORIZACIÓN Y RECOGIDA ---
+    // Recoger los resultados parciales (filas de C calculadas) en la matriz C del maestro usando MPI_Gather
