@@ -11,8 +11,7 @@
 // Función para inicializar una matriz con valores aleatorios (1 al 10)
 void inicializar_matriz(int matriz[N][N]);
 
-// Función para imprimir una matriz (útil para depurar con N pequeños)
-void imprimir_matriz(int matriz[N][N], const char* nombre);
+void multiplicar_bloque(int filas_por_proceso, int local_A[][N], int B[][N], int local_C[][N]);
 
 // Función principal donde ocurre la magia de MPI
 int main(int argc, char** argv) {
@@ -79,9 +78,7 @@ int main(int argc, char** argv) {
 
     // 4. Repartir las filas de la matriz A usando MPI_Scatter
     // El maestro coge la matriz A y envía bloques de tamaño (filas_por_proceso * N) a los local_A de cada nodo
-    MPI_Scatter(A, filas_por_proceso * N, MPI_INT, 
-                local_A, filas_por_proceso * N, MPI_INT, 
-                0, MPI_COMM_WORLD);
+    MPI_Scatter(A, filas_por_proceso * N, MPI_INT, local_A, filas_por_proceso * N, MPI_INT, 0, MPI_COMM_WORLD);
 
     // --- INICIO DE TEMPORIZACIÓN ---
     // El maestro empieza a contar el tiempo justo antes de que empiece el cálculo distribuido
@@ -91,21 +88,12 @@ int main(int argc, char** argv) {
 
 // --- CÓMPUTO DISTRIBUIDO ---
     // Cada proceso multiplica su porción de filas de A (local_A) por la matriz B completa.
-    for (int i = 0; i < filas_por_proceso; i++) {
-        for (int j = 0; j < N; j++) {
-            local_C[i][j] = 0; // Inicializamos la celda a 0 antes de sumar
-            for (int k = 0; k < N; k++) {
-                local_C[i][j] += local_A[i][k] * B[k][j];
-            }
-        }
-    }
+    multiplicar_bloque(filas_por_proceso, local_A, B, local_C);
 
     // --- FIN DE TEMPORIZACIÓN Y RECOGIDA ---
     // Recoger los resultados parciales (local_C) en la matriz C del maestro usando MPI_Gather.
     // Es exactamente la operación inversa a MPI_Scatter.
-    MPI_Gather(local_C, filas_por_proceso * N, MPI_INT, 
-               C, filas_por_proceso * N, MPI_INT, 
-               0, MPI_COMM_WORLD);
+    MPI_Gather(local_C, filas_por_proceso * N, MPI_INT, C, filas_por_proceso * N, MPI_INT, 0, MPI_COMM_WORLD);
 
     if (rank == 0) {
         // El maestro para el cronómetro justo después de recoger todos los resultados [cite: 40, 271, 276]
@@ -135,13 +123,14 @@ void inicializar_matriz(int matriz[N][N]) {
     }
 }
 
-void imprimir_matriz(int matriz[N][N], const char* nombre) {
-    printf("Matriz %s:\n", nombre);
-    for (int i = 0; i < N; i++) {
+void multiplicar_bloque(int filas_por_proceso, int local_A[][N], int B[][N], int local_C[][N])
+{
+    for (int i = 0; i < filas_por_proceso; i++) {
         for (int j = 0; j < N; j++) {
-            printf("%d\t", matriz[i][j]);
+            local_C[i][j] = 0; // Inicializamos la celda a 0 antes de sumar
+            for (int k = 0; k < N; k++) {
+                local_C[i][j] += local_A[i][k] * B[k][j];
+            }
         }
-        printf("\n");
     }
-    printf("\n");
 }
