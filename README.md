@@ -3,7 +3,7 @@
 Docker image of Alpine Linux with  [MPICH](http://www.mpich.org/) -- portable implementation of Message Passing Interface (MPI) standard. Designed for MPI program development and deployment.
 
 Provide solution for MPI Cluster Automation with Docker containers using either Docker Compose or Docker Swarm Mode.
-
+POLLA
 ----
 
         Best Paper Award at IEEE CCWC 2017
