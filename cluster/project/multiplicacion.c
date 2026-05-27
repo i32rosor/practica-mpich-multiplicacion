@@ -63,11 +63,25 @@ int main(int argc, char** argv) {
     }
 
     // --- REPARTO DE DATOS (AQUÍ EMPIEZA LA COMUNICACIÓN) ---
-    // 1. Enviar la matriz B completa a TODOS los procesos usando MPI_Bcast
-    // ... (Lo implementaremos en el siguiente paso)
+// 1. Calcular cuántas filas le tocan a cada proceso
+    // Al ser N múltiplo de 8 y usar 1, 2, 4 u 8 procesos, la división siempre será exacta.
+    int filas_por_proceso = N / size;
 
-    // 2. Repartir las filas de la matriz A usando MPI_Scatter
-    // ... (Lo implementaremos en el siguiente paso)
+    // 2. Cada proceso (incluido el maestro) necesita memoria para almacenar:
+    // - Las filas de A que le tocan procesar (local_A)
+    // - Las filas de C donde guardará sus resultados parciales (local_C)
+    int (*local_A)[N] = malloc(sizeof(int[filas_por_proceso][N]));
+    int (*local_C)[N] = malloc(sizeof(int[filas_por_proceso][N]));
+
+    // 3. Enviar la matriz B completa a TODOS los procesos usando MPI_Bcast
+    // Parámetros: Datos, Cantidad total ($N \times N$), Tipo de dato, Nodo origen (0), Comunicador
+    MPI_Bcast(B, N * N, MPI_INT, 0, MPI_COMM_WORLD);
+
+    // 4. Repartir las filas de la matriz A usando MPI_Scatter
+    // El maestro coge la matriz A y envía bloques de tamaño (filas_por_proceso * N) a los local_A de cada nodo
+    MPI_Scatter(A, filas_por_proceso * N, MPI_INT, 
+                local_A, filas_por_proceso * N, MPI_INT, 
+                0, MPI_COMM_WORLD);
 
     // --- INICIO DE TEMPORIZACIÓN ---
     // El maestro empieza a contar el tiempo justo antes de que empiece el cálculo distribuido
@@ -75,9 +89,59 @@ int main(int argc, char** argv) {
         start_time = MPI_Wtime();
     }
 
-    // --- CÓMPUTO DISTRIBUIDO ---
-    // Cada proceso multiplica su porción de filas de A por la matriz B completa.
-    // ... (Lo implementaremos en el siguiente paso)
+// --- CÓMPUTO DISTRIBUIDO ---
+    // Cada proceso multiplica su porción de filas de A (local_A) por la matriz B completa.
+    for (int i = 0; i < filas_por_proceso; i++) {
+        for (int j = 0; j < N; j++) {
+            local_C[i][j] = 0; // Inicializamos la celda a 0 antes de sumar
+            for (int k = 0; k < N; k++) {
+                local_C[i][j] += local_A[i][k] * B[k][j];
+            }
+        }
+    }
 
     // --- FIN DE TEMPORIZACIÓN Y RECOGIDA ---
-    // Recoger los resultados parciales (filas de C calculadas) en la matriz C del maestro usando MPI_Gather
+    // Recoger los resultados parciales (local_C) en la matriz C del maestro usando MPI_Gather.
+    // Es exactamente la operación inversa a MPI_Scatter.
+    MPI_Gather(local_C, filas_por_proceso * N, MPI_INT, 
+               C, filas_por_proceso * N, MPI_INT, 
+               0, MPI_COMM_WORLD);
+
+    if (rank == 0) {
+        // El maestro para el cronómetro justo después de recoger todos los resultados [cite: 40, 271, 276]
+        end_time = MPI_Wtime();
+        printf("Tiempo total de computación: %f segundos\n", end_time - start_time); 
+    }
+
+    // --- LIBERAR MEMORIA Y FINALIZAR ---
+    if (rank == 0) {
+        free(A);
+        free(C);
+    }
+    free(B);
+
+    MPI_Finalize();
+    return 0;
+}
+
+// --- Implementación de funciones auxiliares ---
+
+void inicializar_matriz(int matriz[N][N]) {
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
+            // Valores aleatorios entre 1 y 10 [cite: 39]
+            matriz[i][j] = (rand() % 10) + 1; 
+        }
+    }
+}
+
+void imprimir_matriz(int matriz[N][N], const char* nombre) {
+    printf("Matriz %s:\n", nombre);
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
+            printf("%d\t", matriz[i][j]);
+        }
+        printf("\n");
+    }
+    printf("\n");
+}
